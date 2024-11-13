@@ -49,10 +49,3 @@ node_modules/
 *.swp
 *.swo
 *.tmp
-
-Data Warehouse\db_manager.py
-Data Warehouse\extract_data.py
-Data Warehouse\main.py
-Data Warehouse\postgresql_config.py
-Data Warehouse\schema_config.json
-Data Warehouse\config.ini
