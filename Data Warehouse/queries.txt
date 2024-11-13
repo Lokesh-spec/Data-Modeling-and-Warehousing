@@ -1,0 +1,157 @@
+-- Date Dimension Table
+CREATE TABLE IF NOT EXISTS date_dim (
+	date_key INTEGER,
+	date DATE NOT NULL,
+	year SMALLINT NOT NULL,
+	quarter SMALLINT NOT NULL,
+	month SMALLINT NOT NULL,
+	week SMALLINT NOT NULL,
+	day SMALLINT NOT NULL,
+	is_weekend BOOLEAN,
+	PRIMARY KEY (date_key)
+);
+
+-- Movie Dimension Table
+CREATE TABLE IF NOT EXISTS movie_dim (
+    movie_key INTEGER,
+    film_id SMALLINT NOT NULL,
+    title VARCHAR NOT NULL,
+    description TEXT NOT NULL,
+    language VARCHAR NOT NULL,
+    length SMALLINT NOT NULL,
+    rating mpaa_rating,
+    special_features VARCHAR,
+    PRIMARY KEY (movie_key)
+);
+
+
+-- Customer Dimension Table
+CREATE TABLE IF NOT EXISTS customer_dim (
+	customer_key SERIAL,
+	first_name VARCHAR(50) NOT NULL,
+	last_name VARCHAR(50) NOT NULL,
+	email VARCHAR,
+	address VARCHAR(50) NOT NULL,
+	address2 VARCHAR(50),
+	district VARCHAR(50) NOT NULL,
+	city VARCHAR(50) NOT NULL,
+	country VARCHAR(50) NOT NULL,
+	postal_code VARCHAR(50),
+	phone VARCHAR(50) NOT NULL,
+	active SMALLINT NOT NULL,
+	create_date DATE NOT NULL,
+	start_date DATE NOT NULL,
+	end_date DATE NOT NULL,
+	PRIMARY KEY (customer_key)
+);
+
+-- Store Dimension Table
+CREATE TABLE IF NOT EXISTS store_dim (
+	store_key SMALLINT,
+	store_id SMALLINT NOT NULL,
+	address VARCHAR(50) NOT NULL,
+	address2 VARCHAR(50),
+	district VARCHAR(20) NOT NULL,
+	city VARCHAR(20) NOT NULL,
+	country VARCHAR(20) NOT NULL,
+	postal_code VARCHAR(20),
+	manager_first_name VARCHAR NOT NULL,
+	manager_last_name VARCHAR NOT NULL,
+	start_date DATE NOT NULL,
+	end_date DATE NOT NULL,
+	PRIMARY KEY (store_key)
+);
+
+-- Sales Fact Table
+CREATE TABLE IF NOT EXISTS sales_fact (
+	sales_key SERIAL,
+	date_key INTEGER REFERENCES date_dim(date_key),
+	customer_key INTEGER REFERENCES customer_dim(customer_key),
+	movie_key INTEGER REFERENCES movie_dim(movie_key),
+	store_key SMALLINT REFERENCES store_dim(store_key),
+	sales_amount INTEGER,
+	PRIMARY KEY (sales_key)
+);
+
+-- Inserting Data
+
+-- Date Dimension
+INSERT INTO date_dim 
+(date_key, date, year, quarter, month, week, day, is_weekend)
+SELECT DISTINCT TO_CHAR(DATE(payment_date), 'YYYYMMDD')::INTEGER AS date_key,
+	   DATE(payment_date) as date, 
+	   EXTRACT(YEAR FROM payment_date) as year,
+       EXTRACT(QUARTER FROM payment_date) as quarter, 
+	   EXTRACT(MONTH FROM payment_date) as month,
+	   EXTRACT(WEEK FROM payment_date) as week, 
+	   EXTRACT(DAY FROM payment_date) as day,
+	   EXTRACT(DOW FROM payment_date) IN (0, 6) as is_weekend
+  FROM payment;
+
+-- Customer Dimension
+INSERT INTO customer_dim 
+	(customer_key, first_name, last_name, email, address, address2, district, city, country, postal_code, phone, active, create_date, start_date, end_date)
+SELECT customer_id as customer_key,
+	   first_name,
+	   last_name,
+	   email,
+	   a.address,
+	   a.address2,
+	   a.district,
+	   ci.city,
+	   co.country,
+	   a.postal_code,
+	   a.phone,
+	   c.active,
+	   c.create_date,
+	   NOW() as start_date,
+	   NOW() as end_date
+FROM customer c
+JOIN address a on a.address_id = c.address_id
+JOIN city ci on a.city_id = ci.city_id
+JOIN country co on co.country_id = ci.country_id;
+
+-- Movie Dimension
+INSERT INTO movie_dim (movie_key, film_id, title, description, language, length, rating, special_features)
+SELECT f.film_id as movie_key, 
+       f.film_id,
+       f.title,
+       f.description,
+       l.name as language,
+       f.length,
+       f.rating,
+       f.special_features
+  FROM film f
+  JOIN language l on l.language_id = f.language_id;
+
+-- Store Dimension
+INSERT INTO store_dim (store_key, store_id, address, address2, district, city, country, postal_code, manager_first_name, manager_last_name, start_date, end_date)
+SELECT s.store_id as store_key,
+	   s.store_id,
+	   a.address,
+	   a.address2,
+	   a.district,
+	   ci.city,
+	   co.country,
+	   a.postal_code,
+	   st.first_name as manager_first_name,
+	   st.last_name as manager_last_name,
+	   now() as start_date,
+	   now() as end_date
+  FROM store s
+  JOIN address a on a.address_id = s.address_id
+  JOIN city ci on ci.city_id = a.city_id
+  JOIN country co on co.country_id = ci.country_id
+  JOIN staff st on st.store_id = s.store_id;
+
+-- Sales Fact Table
+INSERT INTO sales_fact (date_key, customer_key, movie_key, store_key, sales_amount)
+SELECT 
+	   TO_CHAR(DATE(p.payment_date), 'YYYYMMDD')::INTEGER AS date_key,
+	   p.customer_id AS customer_key,
+	   i.film_id AS movie_key,
+	   i.store_id AS store_key,
+	   p.amount AS payment_amount
+  FROM payment p
+  JOIN rental r ON r.rental_id = p.rental_id
+  JOIN inventory i ON i.inventory_id = r.inventory_id;
